@@ -1,0 +1,57 @@
+name: Update Forest Menu
+
+on:
+  schedule:
+    # 08:30 UTC = 4:30 AM EDT / 3:30 AM EST
+    # Gives plenty of buffer before the 6 AM meal-plan task.
+    - cron: "30 8 * * *"
+
+  # Lets you test it manually.
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-menu:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Fetch today's Forest menu
+        run: |
+          curl -fsSL --retry 3 \
+            "https://forest-menu.jcomley.workers.dev/" \
+            -o forest-today.json
+
+      - name: Validate JSON
+        run: |
+          python - <<'PY'
+          import json
+
+          with open("forest-today.json", "r") as f:
+              data = json.load(f)
+
+          assert data.get("location") == "Forest Dining Hall"
+          assert data.get("date")
+          assert isinstance(data.get("menus"), list)
+
+          print("Date:", data["date"])
+          print("Menus:", len(data["menus"]))
+          PY
+
+      - name: Commit updated menu
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add forest-today.json
+
+          if git diff --cached --quiet; then
+            echo "No changes."
+          else
+            git commit -m "Update Forest menu"
+            git push
+          fi
